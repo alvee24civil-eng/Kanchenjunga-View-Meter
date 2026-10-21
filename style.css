@@ -1,0 +1,178 @@
+
+.card{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0)) , var(--card);
+  backdrop-filter:blur(8px);
+  transition:transform .45s cubic-bezier(.2,.8,.2,1), border-color .4s, box-shadow .45s;
+}
+.card:hover{
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb, var(--accent) 35%, var(--line));
+  box-shadow:0 26px 60px -28px rgba(0,0,0,.6), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* light sheen that sweeps across on hover */
+.card::after{
+  content:"";
+  position:absolute; inset:0;
+  background:linear-gradient(115deg, transparent 35%, rgba(255,255,255,.06) 50%, transparent 65%);
+  transform:translateX(-120%);
+  pointer-events:none;
+}
+.card:hover::after{ animation:sheen 1.2s ease; }
+
+/* ---------- Headings ---------- */
+.card h2{
+  display:flex; align-items:center; gap:10px;
+  color:var(--muted);
+}
+.card h2::before{
+  content:""; width:14px; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, var(--accent), transparent);
+}
+
+/* ---------- Day selector polish ---------- */
+.seg{ box-shadow:inset 0 1px 0 rgba(255,255,255,.03); }
+.seg button{ transition:color .3s, transform .3s cubic-bezier(.2,.8,.2,1); }
+.seg button:hover{ color:var(--ink); transform:translateY(-1px); }
+.seg button:active{ transform:scale(.98); }
+.seg button b{ transition:color .4s; }
+.seg-ind{ background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--card)), var(--card)); }
+
+/* ---------- Hero ring ---------- */
+.ring .num{
+  background:linear-gradient(180deg, var(--ink), color-mix(in srgb, var(--ink) 65%, transparent));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+#arc{ filter:drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent)); }
+.chip{ backdrop-filter:blur(6px); }
+
+/* ============================================================
+   RADAR MAP
+   ============================================================ */
+.radar-map{
+  position:relative;
+  aspect-ratio:16/9;
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid var(--line);
+  background:
+    radial-gradient(ellipse at 50% 55%, #15354f 0%, #0b2032 55%, #071422 100%);
+  isolation:isolate;
+}
+
+/* faint lat/long grid */
+.radar-map::before{
+  content:""; position:absolute; inset:0; z-index:0;
+  background-image:
+    linear-gradient(rgba(127,178,229,.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127,178,229,.08) 1px, transparent 1px);
+  background-size:12.5% 16.66%;
+  mask-image:radial-gradient(ellipse at center, #000 55%, transparent 100%);
+  -webkit-mask-image:radial-gradient(ellipse at center, #000 55%, transparent 100%);
+}
+
+/* concentric range rings */
+.radar-rings{
+  position:absolute; left:50%; top:50%; z-index:1;
+  width:100%; aspect-ratio:1; transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:repeating-radial-gradient(circle, transparent 0 58px, rgba(127,178,229,.14) 58px 59px);
+  -webkit-mask-image:radial-gradient(circle, #000 20%, transparent 70%);
+  mask-image:radial-gradient(circle, #000 20%, transparent 70%);
+}
+
+/* rotating sweep */
+.radar-sweep{
+  position:absolute; left:50%; top:50%; z-index:2;
+  width:160%; aspect-ratio:1; transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:conic-gradient(from 0deg, transparent 0 300deg, rgba(79,191,133,.22) 352deg, rgba(79,191,133,.55) 360deg);
+  animation:sweep 7s linear infinite;
+  pointer-events:none;
+  -webkit-mask-image:radial-gradient(circle, #000 0%, #000 40%, transparent 70%);
+  mask-image:radial-gradient(circle, #000 0%, #000 40%, transparent 70%);
+}
+
+/* precipitation-style blips */
+.blip{
+  position:absolute; z-index:3; width:6px; height:6px; border-radius:50%;
+  background:var(--good); box-shadow:0 0 10px var(--good);
+  animation:blip 3.6s ease-in-out infinite;
+}
+.blip:nth-of-type(2){ animation-delay:1.2s; }
+.blip:nth-of-type(3){ animation-delay:2.4s; }
+
+/* clouds: opacity follows the score (set by script.js via --cloud) */
+.cloud{
+  position:absolute; z-index:4; border-radius:50%;
+  filter:blur(14px);
+  background:radial-gradient(ellipse at center, rgba(235,241,248,.95) 0%, rgba(220,230,240,.5) 55%, transparent 72%);
+  opacity:calc(var(--cloud,.5) * .9);
+  pointer-events:none;
+}
+.c1{ width:55%; height:34%; left:-8%;  top:14%;  animation:cloudA 26s ease-in-out infinite; }
+.c2{ width:62%; height:38%; right:-12%; top:6%;  animation:cloudB 34s ease-in-out infinite; }
+.c3{ width:48%; height:30%; left:22%;  bottom:-6%; animation:cloudA 40s ease-in-out infinite reverse; }
+
+/* mist sheet along the valley */
+.mist-layer{
+  position:absolute; left:-10%; right:-10%; bottom:18%; height:30%; z-index:5;
+  background:linear-gradient(90deg, transparent, rgba(228,235,243,.55), transparent);
+  filter:blur(10px);
+  opacity:calc(var(--mist,0) * .9);
+  animation:mistSlide 18s ease-in-out infinite;
+  pointer-events:none;
+}
+
+/* Tetulia pin */
+.pin{
+  position:absolute; left:50%; top:50%; z-index:6;
+  transform:translate(-50%,-50%);
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  font-size:12px; font-weight:600; letter-spacing:.04em; color:var(--ink);
+  pointer-events:none;
+}
+.pin i{
+  position:relative; width:12px; height:12px; border-radius:50%;
+  background:var(--accent); box-shadow:0 0 0 3px rgba(127,178,229,.25);
+}
+.pin i::after{
+  content:""; position:absolute; inset:-10px; border-radius:50%;
+  border:1px solid var(--accent); opacity:0;
+  animation:ping 2.4s ease-out infinite;
+}
+.pin span{
+  padding:4px 10px; border-radius:99px;
+  background:rgba(7,20,34,.7); border:1px solid var(--line);
+  backdrop-filter:blur(6px);
+}
+
+/* legend under the map */
+.legend{
+  display:flex; gap:18px; flex-wrap:wrap;
+  margin-top:14px; font-size:12px; color:var(--muted);
+}
+.legend span{ display:inline-flex; align-items:center; gap:8px; }
+.lg{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+.lg-cloud{ background:#e8edf3; }
+.lg-mist{ background:#9fb3c8; }
+.lg-clear{ background:var(--good); }
+
+/* ============================================================
+   Keyframes
+   ============================================================ */
+@keyframes sweep{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
+@keyframes cloudA{ 0%,100%{ transform:translateX(-30px); } 50%{ transform:translateX(40px); } }
+@keyframes cloudB{ 0%,100%{ transform:translateX(30px); }  50%{ transform:translateX(-40px); } }
+@keyframes mistSlide{ 0%,100%{ transform:translateX(-25px); } 50%{ transform:translateX(25px); } }
+@keyframes blip{ 0%,100%{ opacity:.2; transform:scale(.8); } 50%{ opacity:1; transform:scale(1.25); } }
+@keyframes ping{ 0%{ transform:scale(.6); opacity:.9; } 100%{ transform:scale(2.2); opacity:0; } }
+@keyframes sheen{ to{ transform:translateX(120%); } }
+
+/* ============================================================
+   Reduced motion: keep the look, drop the movement
+   ============================================================ */
+@media (prefers-reduced-motion:reduce){
+  .radar-sweep,.blip,.cloud,.mist-layer,.pin i::after,.card::after{ animation:none !important; }
+}
