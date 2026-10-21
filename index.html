@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kanchenjunga Viewing Meter</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#071426;color:#edf5ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{width:100%;max-width:900px}
+.eyebrow{color:#50e6ad;letter-spacing:3px;font-size:12px;margin:0}
+h1{font-size:clamp(26px,5vw,40px);margin:6px 0 4px}
+.sub{color:#a8bfd7;margin:0 0 24px}
+.days{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{background:#0c1d32;border:1px solid #274361;border-radius:18px;padding:20px;text-align:center}
+.lbl{color:#a8bfd7;font-size:13px}
+.big{font-size:48px;font-weight:700;margin:8px 0 4px}
+.verdict{font-weight:700;letter-spacing:1px}
+.sub2{color:#a8bfd7;font-size:13px;margin-top:4px}
+.models{margin-top:14px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#8fa6bf}
+.good{border-top:4px solid #27dca1}.good .verdict{color:#27dca1}.good .big{color:#27dca1}
+.ok{border-top:4px solid #e6b44c}.ok .verdict{color:#e6b44c}.ok .big{color:#e6b44c}
+.bad{border-top:4px solid #e0656a}.bad .verdict{color:#e0656a}.bad .big{color:#e0656a}
+#updated{color:#a8bfd7;font-size:13px;margin-top:18px}
+.note{color:#8fa6bf;font-size:12px;line-height:1.5}
+button{margin-top:12px;padding:12px 18px;border:0;border-radius:10px;background:#27dca1;color:#071426;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5}
+@media (max-width:680px){.days{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">WEATHER-BASED VIEWING INDEX</p>
+  <h1>Kanchenjunga Viewing Meter</h1>
+  <p class="sub">Tetulia,Panchagarh </p>
+  <div id="days" class="days"></div>
+  <p id="updated"></p>
+  <button id="refresh">Refresh</button>
+</main>
+<script src="script.js"></script>
+</body>
+</html>
