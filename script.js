@@ -755,13 +755,9 @@ function render(fc, aq) {
 // ============================================================
 // REFRESH BUTTON
 // ============================================================
-
-$("refresh")
-  .addEventListener(
-    "click",
-    load
-  );
-
+load();
+requestAnimationFrame(frame);
+setInterval(load, 30 * 60 * 1000);
 
 // ============================================================
 // INITIAL LOAD
