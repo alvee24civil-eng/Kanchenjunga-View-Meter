@@ -1,777 +1,240 @@
-const LAT = 26.5032;
-const LON = 88.344;
-const TZ = "Asia/Dhaka";
-
-const MODELS = ["ecmwf_ifs04", "gfs_seamless"];
+const LAT = 26.5032, LON = 88.344, TZ = "Asia/Dhaka";
+const MODELS = [{ id: "ecmwf_ifs04", name: "ECMWF" }, { id: "gfs_seamless", name: "GFS" }];
 const HOURS = ["06:00", "07:00", "08:00"];
-
+const DAY_NAMES = ["Today", "Tomorrow", "Day 3"];
 const $ = id => document.getElementById(id);
+const isNum = v => typeof v === "number" && !Number.isNaN(v);
 
-const isNum = v =>
-  typeof v === "number" && !Number.isNaN(v);
+const BANDS = [
+  { min: 0,  max: 19,  name: "Hidden",      color: "#e0656a", sky: ["#3e4855", "#8a929c"], desc: "Heavy cloud cover. The range will not be visible this morning." },
+  { min: 20, max: 39,  name: "Unwatchable", color: "#e0656a", sky: ["#4b5664", "#a4aab2"], desc: "Thick mist over the valley. At most, faint outlines may appear." },
+  { min: 40, max: 59,  name: "Hazy",        color: "#e6b44c", sky: ["#37567a", "#d6b48a"], desc: "Peaks partly hidden. Patches of ridge show through the haze." },
+  { min: 60, max: 79,  name: "Visible",     color: "#4fbf85", sky: ["#2a5486", "#f0c58f"], desc: "Most of the range is clear. Light haze softens the distant peaks." },
+  { min: 80, max: 100, name: "Clear",       color: "#4fbf85", sky: ["#1f4f8a", "#ffd9a0"], desc: "Full range in sharp view. Good conditions for a dawn visit." }
+];
+const bandFor = v => BANDS.find(b => v >= b.min && v <= b.max) || BANDS[0];
 
-const fmt = (x, d = 0) =>
-  isNum(x) ? Number(x).toFixed(d) : "n/a";
-
-
-// ============================================================
-// VISUAL STATE
-// ============================================================
-
-const state = {
-  cloud: 0,
-  mist: 0
-};
-
-
-// ============================================================
-// UPDATE CSS VARIABLES
-// ============================================================
-
-function updateVisualState(v) {
-
-  /*
-    CLOUD
-    ----------------------------------------------------------
-    Average low, middle and high cloud cover.
-
-    API values:
-      0   = clear
-      100 = completely cloudy
-
-    CSS variable:
-      0.000 = no cloud
-      1.000 = maximum cloud
-  */
-
-  const cloudValues = [v.cl, v.cm, v.ch]
-    .filter(isNum);
-
-  let cloud = 0;
-
-  if (cloudValues.length > 0) {
-    cloud =
-      cloudValues.reduce((sum, value) => sum + value, 0) /
-      cloudValues.length /
-      100;
-  }
-
-
-  /*
-    MIST
-    ----------------------------------------------------------
-    Humidity + visibility are used to estimate atmospheric mist.
-
-    Higher humidity = more mist.
-    Lower visibility = more mist.
-  */
-
-  let humidityMist = 0;
-
-  if (isNum(v.hum)) {
-    humidityMist = v.hum / 100;
-  }
-
-
-  let visibilityMist = 0;
-
-  if (isNum(v.vis)) {
-
-    // 15 km or more = almost no visibility-related mist
-    // 0 km = maximum visibility-related mist
-
-    visibilityMist =
-      Math.max(
-        0,
-        Math.min(
-          1,
-          1 - (v.vis / 15)
-        )
-      );
-  }
-
-
-  /*
-    Combine humidity and visibility.
-
-    Humidity gets 60% influence.
-    Visibility gets 40% influence.
-  */
-
-  const mist =
-    (humidityMist * 0.6) +
-    (visibilityMist * 0.4);
-
-
-  // Keep everything between 0 and 1.
-
-  state.cloud =
-    Math.max(
-      0,
-      Math.min(1, cloud)
-    );
-
-  state.mist =
-    Math.max(
-      0,
-      Math.min(1, mist)
-    );
-
-
-  // ==========================================================
-  // SEND WEATHER VALUES TO CSS
-  // ==========================================================
-
-  document.documentElement.style.setProperty(
-    "--cloud",
-    state.cloud.toFixed(3)
-  );
-
-  document.documentElement.style.setProperty(
-    "--mist",
-    state.mist.toFixed(3)
-  );
-}
-
-
-// ============================================================
-// VIEWING SCORE
-// ============================================================
-
-// Each rule:
-// points = score awarded
-// need   = values required
-// test   = condition that must pass
-//
-// Missing data = no points.
-
+// Rules from the plan. Missing data earns no points and is shown as "?".
 function evaluate(v) {
-
   const rules = [
-
-    {
-      name: "Cloud low<20, mid<20, high<30",
-      pts: 30,
-      need: [v.cl, v.cm, v.ch],
-
-      test:
-        v.cl < 20 &&
-        v.cm < 20 &&
-        v.ch < 30
-    },
-
-    {
-      name: "Visibility >12 km",
-      pts: 30,
-      need: [v.vis],
-
-      test:
-        v.vis > 12
-    },
-
-    {
-      name: "Humidity <65%",
-      pts: 20,
-      need: [v.hum],
-
-      test:
-        v.hum < 65
-    },
-
-    {
-      name: "Smog: AOD<0.4 and PM2.5<60",
-      pts: 20,
-      need: [v.aod, v.pm],
-
-      test:
-        v.aod < 0.4 &&
-        v.pm < 60
-    }
-
+    { name: "Cloud low <20%, mid <20%, high <30%", pts: 30, need: [v.cl, v.cm, v.ch], test: () => v.cl < 20 && v.cm < 20 && v.ch < 30 },
+    { name: "Visibility >12 km", pts: 30, need: [v.vis], test: () => v.vis > 12 },
+    { name: "Humidity <65%", pts: 20, need: [v.hum], test: () => v.hum < 65 },
+    { name: "Smog: AOD <0.4 and PM2.5 <60", pts: 20, need: [v.aod, v.pm], test: () => v.aod < 0.4 && v.pm < 60 }
   ];
-
-
   let score = 0;
-
-
   rules.forEach(r => {
-
-    r.missing =
-      r.need.some(x => !isNum(x));
-
-    r.pass =
-      !r.missing &&
-      r.test;
-
-    if (r.pass) {
-      score += r.pts;
-    }
-
+    r.missing = r.need.some(x => !isNum(x));
+    r.pass = !r.missing && r.test();
+    if (r.pass) score += r.pts;
   });
-
-
-  return {
-    score,
-    rules
-  };
+  return { score, rules, v };
 }
-
-
-// ============================================================
-// VERDICT
-// ============================================================
 
 function verdict(score, spread) {
-
-  if (spread > 20) {
-
-    return {
-      t: "DON'T GO",
-      d: "Models disagree",
-      c: "bad"
-    };
-
-  }
-
-
-  if (score >= 90) {
-
-    return {
-      t: "GO TOMORROW",
-      d: "Book the bus now",
-      c: "good"
-    };
-
-  }
-
-
-  if (score >= 70) {
-
-    return {
-      t: "HIGH CHANCE",
-      d: "Stay 2 nights in Tetulia",
-      c: "ok"
-    };
-
-  }
-
-
-  return {
-
-    t: "STAY IN RAJSHAHI",
-    d: "Conditions look poor",
-    c: "bad"
-
-  };
+  if (spread > 20) return { t: "Models disagree", d: "Don't go. The forecasts conflict.", c: "var(--bad)" };
+  if (score >= 90) return { t: "Go tomorrow", d: "Book the bus now.", c: "var(--good)" };
+  if (score >= 70) return { t: "High chance", d: "Stay 2 nights in Tetulia.", c: "var(--good)" };
+  if (score >= 45) return { t: "Maybe", d: "Only if you can stay flexible.", c: "var(--maybe)" };
+  return { t: "Stay home", d: "Conditions look poor.", c: "var(--bad)" };
 }
 
-
-// ============================================================
-// DAY LABEL
-// ============================================================
-
-const dayLabel = i =>
-  ["Today", "Tomorrow", "Day 3"][i] ||
-  `Day ${i + 1}`;
-
-
-// ============================================================
-// FETCH JSON
-// ============================================================
-
-async function getJSON(url) {
-
-  const r = await fetch(url);
-
-  if (!r.ok) {
-    throw new Error(
-      "request failed (" +
-      r.status +
-      ")"
-    );
+async function fetchWithTimeout(url, ms = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
   }
-
-  return r.json();
 }
 
+function buildDays(fc, aq) {
+  const h = fc.hourly;
+  const a = aq && aq.hourly ? aq.hourly : { time: [], aerosol_optical_depth: [], pm2_5: [] };
+  const aqIdx = {};
+  a.time.forEach((t, j) => aqIdx[t] = j);
 
-// ============================================================
-// LOAD WEATHER
-// ============================================================
+  const map = {};
+  h.time.forEach((t, i) => {
+    const [date, hm] = t.split("T");
+    if (!HOURS.includes(hm)) return;
+    const j = aqIdx[t];
+    const aod = j === undefined ? null : a.aerosol_optical_depth[j];
+    const pm  = j === undefined ? null : a.pm2_5[j];
+    map[date] ??= { date, models: {} };
+    MODELS.forEach(m => {
+      const visM = h[`visibility_${m.id}`][i];
+      const v = {
+        cl: h[`cloud_cover_low_${m.id}`][i],
+        cm: h[`cloud_cover_mid_${m.id}`][i],
+        ch: h[`cloud_cover_high_${m.id}`][i],
+        vis: isNum(visM) ? visM / 1000 : null,
+        hum: h[`relative_humidity_2m_${m.id}`][i],
+        aod, pm
+      };
+      const M = (map[date].models[m.id] ??= { scores: [], at07: null });
+      const ev = evaluate(v);
+      M.scores.push(ev.score);
+      if (hm === "07:00") M.at07 = ev;
+    });
+  });
+
+  return Object.values(map)
+    .sort((x, y) => x.date < y.date ? -1 : 1)
+    .slice(0, 3)
+    .map(d => {
+      const per = MODELS.map(m => {
+        const M = d.models[m.id];
+        return M.scores.reduce((s, x) => s + x, 0) / M.scores.length;
+      });
+      return {
+        date: d.date,
+        score: Math.round(Math.min(...per)),
+        spread: Math.round(Math.max(...per) - Math.min(...per)),
+        perModel: per.map(Math.round),
+        models: d.models
+      };
+    });
+}
+
+let days = [], current = 0, lastBand = null;
+const target = { watch: 0, acc: 0, far: 0, cloud: 0, mist: 0 };
+const state  = { watch: 0, acc: 0, far: 0, cloud: 0, mist: 0 };
+
+function renderSegment() {
+  const seg = $("seg");
+  seg.querySelectorAll("button").forEach(b => b.remove());
+  days.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.className = i === current ? "on" : "";
+    b.innerHTML = `${DAY_NAMES[i] || "Day " + (i + 1)}<b>${d.score}%</b>`;
+    b.onclick = () => { current = i; render(); };
+    seg.appendChild(b);
+  });
+  $("segInd").style.transform = `translateX(${current * 100}%)`;
+}
+
+function renderHero(d) {
+  const band = bandFor(d.score);
+  $("sky1").style.stopColor = band.sky[0];
+  $("sky2").style.stopColor = band.sky[1];
+  $("chip").style.setProperty("--c", band.color);
+  $("bandName").textContent = band.name;
+
+  const desc = $("bandDesc");
+  if (lastBand !== band.name) {
+    desc.style.opacity = 0;
+    setTimeout(() => { desc.textContent = band.desc; desc.style.opacity = 1; }, 180);
+  }
+  lastBand = band.name;
+
+  $("arc").style.stroke = band.color;
+  $("verdict").textContent = verdict(d.score, d.spread).t;
+  $("verdict").style.color = band.color;
+
+  target.watch = d.score;
+  target.far   = 0.05 + 0.95 * Math.pow(d.score / 100, 0.9);
+  target.cloud = Math.max(0, (100 - d.score) / 100) * 0.95;
+  target.mist  = Math.max(0, 1 - d.score / 70) * 0.9;
+}
+
+function renderRules(d) {
+  const e = d.models[MODELS[0].id].at07;
+  const g = d.models[MODELS[1].id].at07;
+  const mark = r => r.missing ? `<span class="st m">?</span>`
+    : r.pass ? `<span class="st p">✓</span>` : `<span class="st f">✗</span>`;
+
+  $("rules").innerHTML = e.rules.map((r, i) =>
+    `<tr><td>${r.name}</td><td>${mark(r)}</td><td>${mark(g.rules[i])}</td></tr>`).join("");
+
+  const v = e.v;
+  const f = x => isNum(x) ? Math.round(x) : "n/a";
+  $("raw").innerHTML =
+    `ECMWF 07:00 · cloud ${f(v.cl)}/${f(v.cm)}/${f(v.ch)}% · ` +
+    `vis ${isNum(v.vis) ? v.vis.toFixed(1) : "n/a"} km · RH ${f(v.hum)}% · ` +
+    `AOD ${isNum(v.aod) ? v.aod.toFixed(2) : "n/a"} · PM2.5 ${f(v.pm)}`;
+}
+
+function renderAccuracy(d) {
+  const [e, g] = d.perModel;
+  const agreement = Math.max(0, 100 - d.spread * 1.5);
+  const dayScale = [1, 0.85, 0.7][current] ?? 0.7;
+  const accuracy = Math.round(agreement * dayScale);
+
+  target.acc = accuracy;
+  $("accBar").style.background = bandFor(accuracy).color;
+
+  $("mE").textContent = e + "%";
+  $("mG").textContent = g + "%";
+  $("fE").style.width = e + "%";
+  $("fE").style.background = bandFor(e).color;
+  $("fG").style.width = g + "%";
+  $("fG").style.background = bandFor(g).color;
+
+  $("accNote").textContent =
+    `Models agree within ${d.spread} points. ` +
+    (current === 0 ? "Today's forecast is the most reliable."
+      : current === 1 ? "Tomorrow is less certain than today."
+      : "Day 3 is the least certain. Check again the day before.");
+}
+
+function render() {
+  if (!days.length) return;
+  const d = days[current];
+  renderSegment();
+  renderHero(d);
+  renderRules(d);
+  renderAccuracy(d);
+}
 
 async function load() {
-
-  $("refresh").disabled = true;
-
-  $("updated").textContent =
-    "Fetching weather…";
-
-
+  $("updated").textContent = "Fetching live forecast…";
   try {
+    const fcUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+      `&timezone=${TZ}&forecast_days=3&models=${MODELS.map(m => m.id).join(",")}` +
+      `&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,relative_humidity_2m`;
+    const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}` +
+      `&timezone=${TZ}&forecast_days=3&hourly=aerosol_optical_depth,pm2_5`;
 
-    // --------------------------------------------------------
-    // WEATHER FORECAST
-    // --------------------------------------------------------
+    const [fc, aq] = await Promise.all([
+      fetchWithTimeout(fcUrl),
+      fetchWithTimeout(aqUrl).catch(err => { console.warn("Air quality unavailable:", err); return null; })
+    ]);
 
-    const fcUrl =
-      `https://api.open-meteo.com/v1/forecast` +
-      `?latitude=${LAT}` +
-      `&longitude=${LON}` +
-      `&timezone=${TZ}` +
-      `&forecast_days=3` +
-      `&models=${MODELS.join(",")}` +
-      `&hourly=` +
-      `cloud_cover_low,` +
-      `cloud_cover_mid,` +
-      `cloud_cover_high,` +
-      `visibility,` +
-      `relative_humidity_2m`;
-
-
-    // --------------------------------------------------------
-    // AIR QUALITY
-    // --------------------------------------------------------
-
-    const aqUrl =
-      `https://air-quality-api.open-meteo.com/v1/air-quality` +
-      `?latitude=${LAT}` +
-      `&longitude=${LON}` +
-      `&timezone=${TZ}` +
-      `&forecast_days=3` +
-      `&hourly=` +
-      `aerosol_optical_depth,pm2_5`;
-
-
-    // --------------------------------------------------------
-    // FETCH BOTH AT THE SAME TIME
-    // --------------------------------------------------------
-
-    const [fc, aq] =
-      await Promise.all([
-        getJSON(fcUrl),
-        getJSON(aqUrl)
-      ]);
-
-
-    // --------------------------------------------------------
-    // RENDER
-    // --------------------------------------------------------
-
-    render(fc, aq);
-
-
-    $("updated").textContent =
-      "Updated " +
-      new Date().toLocaleString(
-        "en-GB",
-        {
-          timeZone: TZ
-        }
-      );
-
-
+    days = buildDays(fc, aq);
+    current = 0;
+    render();
+    $("updated").textContent = (aq ? "" : "Smog data unavailable · ") +
+      "Updated " + new Date().toLocaleString("en-GB", { timeZone: TZ });
   } catch (e) {
-
-    $("days").innerHTML = "";
-
-    $("updated").textContent =
-      "Could not load weather: " +
-      e.message;
-
-
-  } finally {
-
-    $("refresh").disabled = false;
-
+    console.error(e);
+    $("updated").textContent = "Could not load forecast: " + e.message + ". Reload to try again.";
   }
 }
 
+// Smooth animation loop: eases every value toward its target.
+function frame() {
+  const k = 0.07;
+  for (const key in state) state[key] += (target[key] - state[key]) * k;
 
-// ============================================================
-// DETAIL INFORMATION
-// ============================================================
+  $("arc").setAttribute("stroke-dashoffset", (175.93 * (1 - state.watch / 100)).toFixed(2));
+  $("heroNum").textContent = Math.round(state.watch) + "%";
+  $("accNum").textContent = Math.round(state.acc) + "%";
+  $("accBar").style.width = state.acc.toFixed(1) + "%";
 
-function detailHTML(m, rec) {
+  $("far").setAttribute("opacity", state.far.toFixed(3));
+  $("cloudG").setAttribute("opacity", state.cloud.toFixed(3));
+  $("mistG").setAttribute("opacity", state.mist.toFixed(3));
 
-  const v = rec.v;
-  const ev = rec.ev;
+  document.documentElement.style.setProperty("--cloud", state.cloud.toFixed(3));
+  document.documentElement.style.setProperty("--mist", state.mist.toFixed(3));
 
-
-  const lines =
-    ev.rules.map(r =>
-
-      `${r.missing
-        ? "?"
-        : r.pass
-          ? "✓"
-          : "✗"
-      } ${r.name} (${r.pass ? r.pts : 0}/${r.pts})`
-
-    );
-
-
-  return `
-
-    <div style="margin-top:10px">
-
-      <b>${m}</b> · 07:00 · score ${ev.score}
-
-      <br>
-
-      Cloud low ${fmt(v.cl)}%
-      · mid ${fmt(v.cm)}%
-      · high ${fmt(v.ch)}%
-
-      <br>
-
-      Visibility ${fmt(v.vis, 1)} km
-      · Humidity ${fmt(v.hum)}%
-
-      <br>
-
-      AOD ${fmt(v.aod, 2)}
-      · PM2.5 ${fmt(v.pm, 1)}
-
-      <br>
-
-      ${lines.join("<br>")}
-
-    </div>
-
-  `;
+  requestAnimationFrame(frame);
 }
 
-
-// ============================================================
-// RENDER
-// ============================================================
-
-function render(fc, aq) {
-
-  const h = fc.hourly;
-  const a = aq.hourly;
-
-
-  // ----------------------------------------------------------
-  // AIR QUALITY TIME INDEX
-  // ----------------------------------------------------------
-
-  const aqIdx = {};
-
-  a.time.forEach((t, j) => {
-
-    aqIdx[t] = j;
-
-  });
-
-
-  // ----------------------------------------------------------
-  // STORE DAYS
-  // ----------------------------------------------------------
-
-  const days = {};
-
-
-  // ----------------------------------------------------------
-  // LOOP THROUGH WEATHER HOURS
-  // ----------------------------------------------------------
-
-  h.time.forEach((t, i) => {
-
-    const [date, hm] =
-      t.split("T");
-
-
-    // Only use:
-    // 06:00
-    // 07:00
-    // 08:00
-
-    if (!HOURS.includes(hm)) {
-      return;
-    }
-
-
-    // --------------------------------------------------------
-    // FIND AIR QUALITY DATA
-    // --------------------------------------------------------
-
-    const j = aqIdx[t];
-
-
-    const aod =
-      j === undefined
-        ? null
-        : a.aerosol_optical_depth[j];
-
-
-    const pm =
-      j === undefined
-        ? null
-        : a.pm2_5[j];
-
-
-    // Create day
-
-    days[date] ??= {};
-
-
-    // --------------------------------------------------------
-    // PROCESS EACH WEATHER MODEL
-    // --------------------------------------------------------
-
-    MODELS.forEach(m => {
-
-      const visM =
-        h[`visibility_${m}`][i];
-
-
-      const v = {
-
-        cl:
-          h[`cloud_cover_low_${m}`][i],
-
-        cm:
-          h[`cloud_cover_mid_${m}`][i],
-
-        ch:
-          h[`cloud_cover_high_${m}`][i],
-
-        // Open-Meteo visibility is metres.
-        // Convert to kilometres.
-
-        vis:
-          isNum(visM)
-            ? visM / 1000
-            : null,
-
-        hum:
-          h[`relative_humidity_2m_${m}`][i],
-
-        aod,
-
-        pm
-
-      };
-
-
-      // ------------------------------------------------------
-      // EVALUATE SCORE
-      // ------------------------------------------------------
-
-      days[date][m] ??= {};
-
-
-      days[date][m][hm] = {
-
-        v,
-
-        ev: evaluate(v)
-
-      };
-
-
-      // ------------------------------------------------------
-      // UPDATE VISUAL CLOUD / MIST
-      //
-      // We use ECMWF at 07:00 as the visual state.
-      // This prevents the CSS variables being overwritten
-      // multiple times during rendering.
-      // ------------------------------------------------------
-
-      if (
-        hm === "07:00" &&
-        m === "ecmwf_ifs04"
-      ) {
-
-        updateVisualState(v);
-
-      }
-
-    });
-
-  });
-
-
-  // ----------------------------------------------------------
-  // GET DATES
-  // ----------------------------------------------------------
-
-  const dates =
-    Object.keys(days).sort();
-
-
-  // ----------------------------------------------------------
-  // CREATE DAY CARDS
-  // ----------------------------------------------------------
-
-  $("days").innerHTML =
-    dates.map((date, idx) => {
-
-
-      // ------------------------------------------------------
-      // CALCULATE MODEL SCORES
-      // ------------------------------------------------------
-
-      const modelScores =
-        MODELS.map(m => {
-
-          const hrs =
-            Object.values(
-              days[date][m]
-            );
-
-
-          return hrs.reduce(
-            (s, x) =>
-              s + x.ev.score,
-            0
-          ) / hrs.length;
-
-        });
-
-
-      // ------------------------------------------------------
-      // USE WORST MODEL
-      // ------------------------------------------------------
-
-      const score =
-        Math.round(
-          Math.min(...modelScores)
-        );
-
-
-      // ------------------------------------------------------
-      // MODEL DISAGREEMENT
-      // ------------------------------------------------------
-
-      const spread =
-        Math.round(
-          Math.max(...modelScores) -
-          Math.min(...modelScores)
-        );
-
-
-      // ------------------------------------------------------
-      // VERDICT
-      // ------------------------------------------------------
-
-      const v =
-        verdict(
-          score,
-          spread
-        );
-
-
-      // ------------------------------------------------------
-      // DETAILS
-      // ------------------------------------------------------
-
-      const details =
-        MODELS.map(m =>
-
-          days[date][m]["07:00"]
-
-            ? detailHTML(
-                m,
-                days[date][m]["07:00"]
-              )
-
-            : ""
-
-        ).join("");
-
-
-      // ------------------------------------------------------
-      // RETURN CARD HTML
-      // ------------------------------------------------------
-
-      return `
-
-        <div class="card ${v.c}">
-
-          <div class="lbl">
-            ${dayLabel(idx)} · ${date}
-          </div>
-
-
-          <div class="big">
-            ${score}%
-          </div>
-
-
-          <div class="verdict">
-            ${v.t}
-          </div>
-
-
-          <div class="sub2">
-            ${v.d}
-          </div>
-
-
-          <div class="models">
-
-            ${MODELS.map(
-              (m, k) =>
-
-                `<span>
-                  ${m}: ${Math.round(modelScores[k])}
-                </span>`
-
-            ).join("")}
-
-          </div>
-
-
-          <details
-            style="
-              text-align:left;
-              margin-top:12px;
-              font-size:12px;
-              color:#8fa6bf
-            "
-          >
-
-            <summary
-              style="cursor:pointer"
-            >
-              Why this score?
-            </summary>
-
-            ${details}
-
-          </details>
-
-        </div>
-
-      `;
-
-    }).join("");
-
-}
-
-
-// ============================================================
-// REFRESH BUTTON
-// ============================================================
 load();
 requestAnimationFrame(frame);
 setInterval(load, 30 * 60 * 1000);
-
-// ============================================================
-// INITIAL LOAD
-// ============================================================
-
-load();
-
-
-// ============================================================
-// AUTO REFRESH
-// Every 30 minutes
-// ============================================================
-
-setInterval(
-  load,
-  30 * 60 * 1000
-);
